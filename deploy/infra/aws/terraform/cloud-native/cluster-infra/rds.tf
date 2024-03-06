@@ -30,6 +30,8 @@ module "cp_rds" {
 
 
   tags = local.tags
+
+  depends_on = [ module.internal_cluster_access_sg ]
 }
 
 resource "aws_db_subnet_group" "rds_subnet_group" {

@@ -156,7 +156,7 @@ Terraform module has the following outputs:
 | `rds_root_username` | Username of the RDS default user |
 | `rds_port` | The port on which the RDS instance accepts connections |
 
-Example of the deployment `cluster-infrastructure` module in Test environment:
+Example of the deployment `cluster-infrastructure` module:
 
 main.tf
 ```hcl
@@ -220,7 +220,6 @@ module "cp-test-eks-infra" {
   vpc_id                            = "vpc-xxxxxxxxxxxx"
   cp_api_access_prefix_lists        = ["pl-xxxxxxxxxxxx"]
   subnet_ids                        = ["subnet-xxxxxxxxxxxx", "subnet-xxxxxxxxxxxx", "subnet-xxxxxxxxxxxx"]
-  deploy_filesystem_type            = "efs"
   iam_role_permissions_boundary_arn = "arn:aws:iam::xxxxxxxxxxxx:policy/eo_role_boundary"
   eks_system_node_group_subnet_ids  = ["subnet-xxxxxxxxxxxx"]
   eks_additional_role_mapping = [
@@ -297,12 +296,12 @@ output "cp_rds_address" {
 
 ````
 
-7. In file Output.tf change for `module.cp-test-eks-infra.*` the  `cp-test-eks-infra` to your deployment module name.
-8. Commit and push deploy settings for `cluster-infrastructure` in to git repository.
+1. In file Output.tf change for `module.cp-test-eks-infra.*` the `cp-test-eks-infra` to your deployment module name.
+2. Commit and push deploy settings for `cluster-infrastructure` in to git repository.
 
-9. Connect to created bastion instance and clone git repository with previously pushed settings for `cluster-infrastructure` deployment.
-10. From `cluster-infrastructure` directory deploy infrastructure with `terraform init` `terraform apply` commands.
-11. Mount created file system into instance. For example for efs instance in eu-west-1 region by using command:
+3. Connect to created bastion instance and clone git repository with previously pushed settings for `cluster-infrastructure` deployment.
+4.  From `cluster-infrastructure` directory deploy infrastructure with `terraform init` `terraform apply` commands.
+5.  Mount created file system into instance. For example for efs instance in eu-west-1 region by using command:
 ````
 sudo mount -t nfs -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport fs-xxxxxxxxxxx.efs.eu-west-1.amazonaws.com:/  /opt
 
@@ -311,7 +310,6 @@ sudo mount -t nfs -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retr
 13. Run commands in console or create and run script file like in example:
 
 ````
-#!/bin/bash
 #Install
 export SYSTEM_BUCKET_NAME="xxxxxxxxxxxxxxxx"
 export REGISTRY_BUCKET_NAME="xxxxxxxxxxxxxx"
