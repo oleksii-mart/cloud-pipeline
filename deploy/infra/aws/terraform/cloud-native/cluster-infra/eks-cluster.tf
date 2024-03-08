@@ -157,6 +157,6 @@ resource "helm_release" "alb-controller" {
     value = "false"
   }
 
-  depends_on = [module.eks, module.internal_cluster_access_sg]
+  depends_on = [module.internal_cluster_access_sg]
 }
 
