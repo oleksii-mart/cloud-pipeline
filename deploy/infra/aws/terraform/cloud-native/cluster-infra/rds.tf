@@ -31,6 +31,7 @@ module "cp_rds" {
 
   tags = local.tags
 
+  depends_on = [ module.internal_cluster_access_sg ]
 }
 
 resource "aws_db_subnet_group" "rds_subnet_group" {
@@ -91,7 +92,7 @@ resource "postgresql_role" "this" {
   login           = true
   create_database = "false"
 
-  depends_on = [aws_secretsmanager_secret.rds_root_secret, aws_secretsmanager_secret_version.rds_root_secret, module.internal_cluster_access_sg]
+  depends_on = [aws_secretsmanager_secret.rds_root_secret, aws_secretsmanager_secret_version.rds_root_secret]
 }
 
 resource "postgresql_database" "this" {
