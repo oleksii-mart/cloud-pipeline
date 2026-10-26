@@ -38,6 +38,7 @@ jobs:
   # cloud-pipeline.{major}.{minor}.{patch}.{build}.{commit}.tgz
   ##############################################################
   prebuild:
+    if: github.ref_name == 'java21_issue_4570_download_archive_umbrella'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.parse.outputs.version }}
@@ -63,6 +64,7 @@ jobs:
   # Build docker images
   ##############################################################
   build:
+    if: github.ref_name == 'java21_issue_4570_download_archive_umbrella'
     name: build docker (${{ matrix.service }})
     needs: prebuild
     runs-on: ubuntu-latest
@@ -312,95 +314,3 @@ jobs:
       - name: Post-build
         if: ${{ always() && matrix.post_build_commands != '' }}
         run: ${{ matrix.post_build_commands }}
-
-
-  ##############################################################
-  # Generate dockers-manifest, assemble and package pipectl
-  # Runs after all matrix builds succeed.
-  # Binary is uploaded to s3://cloud-pipeline-oss-builds/builds/<branch>/
-  ##############################################################
-  build-pipectl:
-    needs: [prebuild, build]
-    runs-on: ubuntu-latest
-    env:
-      CP_VERSION_SHORT: ${{ needs.prebuild.outputs.version }}
-      CP_VERSION_FULL: ${{ needs.prebuild.outputs.version_full }}
-      CP_DIST_REPO_NAME: "${{ secrets.CP_DOCKER_DIST_SRV }}${{ secrets.CP_DOCKER_USER }}/cloud-pipeline"
-      BUILD_DIR: /tmp/cp-deploy-build
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Generate dockers manifest
-        run: |
-          python3 - <<'EOF'
-          import yaml, os, shutil
-
-          workflow_file = ".github/workflows/build-pipectl.yml"
-          with open(workflow_file) as f:
-              wf = yaml.safe_load(f)
-
-          matrix   = wf["jobs"]["build"]["strategy"]["matrix"]["include"]
-          tools    = [e for e in matrix if e.get("manifest_pretty_names")]
-
-          repo     = os.environ["CP_DIST_REPO_NAME"].rstrip("/")
-          version  = os.environ["CP_VERSION_SHORT"]
-          sources  = os.environ["DOCKERS_SOURCES_PATH"]
-          mdir     = os.environ["BUILD_DIR"] + "/dockers-manifest"
-
-          os.makedirs(mdir, exist_ok=True)
-          with open(f"{mdir}/manifest.txt", "w") as mf:
-              for tool in tools:
-                  tag        = tool["tag"].replace("$DOCKERS_VERSION", version)
-                  full_tag   = f"{repo}:{tag}"
-                  spec_path  = tool["manifest_spec_path"]
-                  for pretty in tool["manifest_pretty_names"].split("|"):
-                      mf.write(f"{full_tag},{pretty}\n")
-                      pdir = f"{mdir}/{pretty}"
-                      os.makedirs(pdir, exist_ok=True)
-                      for fname in ("icon.png", "README.md", "spec.json"):
-                          src = f"{sources}/{spec_path}/{fname}"
-                          if os.path.exists(src):
-                              shutil.copy(src, f"{pdir}/{fname}")
-          EOF
-
-      - name: Assemble pipectl contents
-        run: |
-          CONTENTS_DIR="${BUILD_DIR}/contents"
-          OTHER_PKGS="${CONTENTS_DIR}/other-packages"
-
-          # Static install scripts, k8s configs, preferences, etc.
-          cp -r deploy/contents/. "${CONTENTS_DIR}/"
-
-          # Dockers manifest built in the previous step
-          cp -r "${BUILD_DIR}/dockers-manifest" "${CONTENTS_DIR}/"
-
-          cp deploy/contents/install/cloud-images/cloud-images-manifest.txt "${CONTENTS_DIR}/"
-
-          # Additional workflow packages (mirrors -p flags in Jenkins build-pipectl.sh)
-          mkdir -p "${OTHER_PKGS}"
-          cp -r workflows/pipe-templates/__SYSTEM/data_loader "${OTHER_PKGS}/"
-          cp -r workflows/pipe-templates/__SYSTEM/system_jobs "${OTHER_PKGS}/"
-          cp -r e2e/prerequisites                             "${OTHER_PKGS}/"
-
-          echo "${CP_VERSION_SHORT}" > "${CONTENTS_DIR}/version.txt"
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v6.2.2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
-
-      - name: Build pipectl binary
-        run: |
-          DIST_FILE="pipectl.${CP_VERSION_FULL}"
-          export DEPLOY_BUILD_OUTPUT_PATH="${BUILD_DIR}/${DIST_FILE}"
-          bash deploy/pipectl/build-pipectl.sh --base64 "${BUILD_DIR}/contents/"
-          echo "DIST_FILE=${DIST_FILE}" >> "$GITHUB_ENV"
-
-      - name: Upload pipectl to S3
-        run: |
-          aws s3 cp --no-progress "${BUILD_DIR}/${DIST_FILE}" \
-            "s3://cloud-pipeline-oss-builds/builds/${GITHUB_REF_NAME}/${DIST_FILE}"
