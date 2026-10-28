@@ -24,9 +24,11 @@ import com.epam.pipeline.controller.vo.async.AsyncTaskStatusVO;
 import com.epam.pipeline.dto.async.AsyncTask;
 import com.epam.pipeline.dto.async.AsyncTaskConsumeResult;
 import com.epam.pipeline.dto.async.AsyncTaskType;
+import com.epam.pipeline.entity.user.DefaultRoles;
 import com.epam.pipeline.manager.async.AsyncTaskManager;
 import com.epam.pipeline.manager.datastorage.DataStorageDownloadArchiveManager;
 import com.epam.pipeline.manager.security.AuthManager;
+import com.epam.pipeline.manager.security.CheckPermissionHelper;
 import com.epam.pipeline.security.acl.AclExpressions;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -42,6 +44,7 @@ public class AsyncTaskApiService {
     private final AsyncTaskManager asyncTaskManager;
     private final DataStorageDownloadArchiveManager downloadArchiveManager;
     private final AuthManager authManager;
+    private final CheckPermissionHelper permissionHelper;
     private final MessageHelper messageHelper;
 
     @PreAuthorize(AclExpressions.ADMIN_OR_GENERAL_USER)
@@ -51,18 +54,18 @@ public class AsyncTaskApiService {
 
     @PreAuthorize(AclExpressions.ADMIN_OR_GENERAL_USER)
     public AsyncTask load(final String id) {
-        return ownedByCaller(id);
+        return reachableByCaller(id);
     }
 
     @PreAuthorize(AclExpressions.ADMIN_OR_GENERAL_USER)
     public AsyncTask cancel(final String id) {
-        ownedByCaller(id);
+        reachableByCaller(id);
         return asyncTaskManager.cancel(id);
     }
 
     @PreAuthorize(AclExpressions.ADMIN_OR_GENERAL_USER)
     public AsyncTaskConsumeResult consume(final String id) {
-        return AsyncTaskConsumeResult.of(downloadArchiveManager.consume(ownedByCaller(id)));
+        return AsyncTaskConsumeResult.of(downloadArchiveManager.consume(reachableByCaller(id)));
     }
 
     @PreAuthorize(AclExpressions.ADMIN_ONLY)
@@ -80,18 +83,22 @@ public class AsyncTaskApiService {
         final AsyncTaskFilterVO restricted = filter == null
                 ? AsyncTaskFilterVO.builder().build()
                 : filter.toBuilder().build();
-        if (!authManager.isAdmin()) {
+        if (!mayReachForeignTask()) {
             restricted.setOwner(authManager.getAuthorizedUser());
         }
         return restricted;
     }
 
-    private AsyncTask ownedByCaller(final String id) {
+    private AsyncTask reachableByCaller(final String id) {
         final AsyncTask task = asyncTaskManager.load(id);
-        if (authManager.isAdmin() || task.getOwner().equalsIgnoreCase(authManager.getAuthorizedUser())) {
+        if (mayReachForeignTask() || permissionHelper.isOwner(task.getOwner())) {
             return task;
         }
         throw new IllegalArgumentException(messageHelper.getMessage(
                 MessageConstants.ERROR_ASYNC_TASK_NOT_FOUND, id));
+    }
+
+    private boolean mayReachForeignTask() {
+        return authManager.isAdmin() || permissionHelper.hasAnyRole(DefaultRoles.ROLE_STORAGE_ADMIN);
     }
 }
